@@ -7,13 +7,13 @@
 
 `include "common_cells/registers.svh"
 
-/// Bootrom containing WFI trampoline, register init, trap handlers, and EOC.
+/// Bootrom containing an MSIP polling trampoline, register init, trap handlers, and EOC.
 /// After reset the core fetches from here:
-/// 1. Enables MSIE, executes WFI, waits until woken by CLINT msip
-/// 2. Clears msip, disables interrupts, clears registers x1/x3-x15
+/// 1. Polls CLINT msip until released by JTAG, then clears msip
+/// 2. Clears registers x1/x3-x15
 /// 3. Sets mtvec to bootrom trap handler
 /// 4. Reads boot address from soc_ctrl, jumps there with jalr zero (ra = &_eoc)
-/// 5. On main() return: _eoc packs retval, writes CORESTATUS, halts
+/// 5. On main() return: _eoc packs retval, writes CORESTATUS, then loops
 /// Trap handler dispatches to SRAM function pointer table at 0x1000_0000.
 /// Source: bootrom.S
 module bootrom #(
@@ -37,23 +37,23 @@ module bootrom #(
     localparam int unsigned StartRomWords = 25;
     localparam logic [31:0] StartRom [StartRomWords] = '{
         // <_start>
-        32'h30445073, // 0x02000000: csrwi mie,8
-        32'h10500073, // 0x02000004: wfi
-        32'h020402B7, // 0x02000008: lui t0,0x2040
-        32'h0002A023, // 0x0200000C: sw zero,0(t0) # 2040000 <__global_pointer$+0x3e4d0>
-        32'h30405073, // 0x02000010: csrwi mie,0
-        32'h00000193, // 0x02000014: li gp,0
-        32'h00000213, // 0x02000018: li tp,0
-        32'h00000313, // 0x0200001C: li t1,0
-        32'h00000393, // 0x02000020: li t2,0
-        32'h00000413, // 0x02000024: li s0,0
-        32'h00000493, // 0x02000028: li s1,0
-        32'h00000513, // 0x0200002C: li a0,0
-        32'h00000593, // 0x02000030: li a1,0
-        32'h00000613, // 0x02000034: li a2,0
-        32'h00000693, // 0x02000038: li a3,0
-        32'h00000713, // 0x0200003C: li a4,0
-        32'h00000793, // 0x02000040: li a5,0
+        32'h020402B7, // 0x02000000: lui t0,0x2040
+        32'h0002A303, // 0x02000004: lw t1,0(t0) # 2040000 <__global_pointer$+0x3e4d0>
+        32'h00000013, // 0x02000008: nop
+        32'h00000013, // 0x0200000C: nop
+        32'hFE030AE3, // 0x02000010: beqz t1,2000004 <_start+0x4>
+        32'h0002A023, // 0x02000014: sw zero,0(t0) # 2040000 <__global_pointer$+0x3e4d0>
+        32'h00000193, // 0x02000018: li gp,0
+        32'h00000213, // 0x0200001C: li tp,0
+        32'h00000313, // 0x02000020: li t1,0
+        32'h00000393, // 0x02000024: li t2,0
+        32'h00000413, // 0x02000028: li s0,0
+        32'h00000493, // 0x0200002C: li s1,0
+        32'h00000513, // 0x02000030: li a0,0
+        32'h00000593, // 0x02000034: li a1,0
+        32'h00000613, // 0x02000038: li a2,0
+        32'h00000693, // 0x0200003C: li a3,0
+        32'h00000713, // 0x02000040: li a4,0
         32'h00000297, // 0x02000044: auipc t0,0x0
         32'h1BC28293, // 0x02000048: addi t0,t0,444 # 2000200 <_trap_handler_wrapper>
         32'h30529073, // 0x0200004C: csrw mtvec,t0
@@ -72,7 +72,7 @@ module bootrom #(
         32'h0012E293, // 0x02000104: ori t0,t0,1
         32'h03000337, // 0x02000108: lui t1,0x3000
         32'h00532423, // 0x0200010C: sw t0,8(t1) # 3000008 <__global_pointer$+0xffe4d8>
-        32'h10500073 // 0x02000110: wfi
+        32'h0000006F // 0x02000110: j 2000110 <_eoc+0x10>
     };
 
     // Contiguous block starting at 0x02000200: _trap_handler_wrapper

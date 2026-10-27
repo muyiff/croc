@@ -6,8 +6,7 @@
 // - Philippe Sauter <phsauter@iis.ee.ethz.ch>
 //
 // This module wraps the processor core and adapts it to the Croc SoC interface.
-// The default core is CVE2 (https://github.com/openhwgroup/cve2).
-// For other cores, modify the internal instantiation and the port connections as needed.
+// The integrated core is Sophon.
 //
 // Replacing the core:
 // The SoC provides two separate OBI master ports (instruction fetch and data access).
@@ -80,101 +79,100 @@ module core_wrap import croc_pkg::*; #() (
   output logic        core_busy_o
 );
 
-  // CVE2: debug halt/exception vectors are provided as runtime inputs.
-  // Cores that hardcode these addresses internally do not need these params.
-  // Remove the localparams and connections below when replacing with such a core.
-  // Make sure to check PeriphDebug's start_addr in croc_pkg and adjust if necesary.
-  localparam bit [31:0] DebugAddrOffset       = get_periph_start_addr(PeriphDebug);
-  localparam bit [31:0] DebugHaltAddress      = DebugAddrOffset + dm::HaltAddress[31:0];
-  localparam bit [31:0] DebugExceptionAddress = DebugAddrOffset + dm::ExceptionAddress[31:0];
+  logic sophon_clk_neg;
 
-  // CVE2 ignores the lowest 8 bits of boot_addr internally; mask here to avoid confusion.
-  // You may want to remove this masking when using a core that uses the full boot address.
-  logic [31:0] boot_addr_masked;
-  assign boot_addr_masked = boot_addr_i & 32'hFFFFFF00;
+  logic        sophon_inst_req;
+  logic [31:0] sophon_inst_addr;
+  logic        sophon_inst_ack;
+  logic [31:0] sophon_inst_rdata;
+  logic        sophon_inst_error;
 
-  // CV-X-IF tie-offs: CVE2-specific co-processor extension interface, disabled here.
-  // Remove this block entirely when replacing CVE2 with another core.
-  // If you want to use CV-X-IF, instantiate your accelerator here and connect the x_* signals.
-  cve2_pkg::x_issue_resp_t x_issue_resp;
-  cve2_pkg::x_result_t     x_result;
-  always_comb begin
-    x_issue_resp = '0;
-    x_result     = '0;
-  end
+  logic        sophon_lsu_req;
+  logic        sophon_lsu_we;
+  logic [31:0] sophon_lsu_addr;
+  logic [31:0] sophon_lsu_wdata;
+  logic [3:0]  sophon_lsu_wstrb;
+  logic        sophon_lsu_ack;
+  logic        sophon_lsu_error;
+  logic [31:0] sophon_lsu_rdata;
 
-`ifdef TRACE_EXECUTION
-  cve2_core_tracing #(
-`else
-  cve2_core #(
-`endif
-    .PMPEnable        ( CorePMPEnable       ),
-    .PMPGranularity   ( 0                   ),
-    .PMPNumRegions    ( 4                   ),
-    .MHPMCounterNum   ( 0                   ),
-    .MHPMCounterWidth ( 40                  ),
-    .RV32E            ( 0                   ),
-    .RV32M            ( cve2_pkg::RV32MNone ),
-    .RV32B            ( cve2_pkg::RV32BNone ),
-    .DbgTriggerEn     ( 1'b1                ),
-    .DbgHwBreakNum    ( 1                   ),
-    .XInterface       ( 1'b0                )
-  ) i_core (
+  tc_clk_inverter i_sophon_clk_inverter (
+    .clk_i ( clk_i          ),
+    .clk_o ( sophon_clk_neg )
+  );
+
+  SOPHON i_sophon (
+    .clk_i,
+    .clk_neg_i       ( sophon_clk_neg ),
+    .rst_ni,
+    .bootaddr_i      ( boot_addr_i    ),
+    .hart_id_i       ( 32'd0          ),
+    .irq_mei_i       ( |irqs_i        ),
+    .irq_mti_i       ( timer_irq_i    ),
+    .irq_msi_i       ( software_irq_i ),
+    .inst_req_o      ( sophon_inst_req   ),
+    .inst_addr_o     ( sophon_inst_addr  ),
+    .inst_ack_i      ( sophon_inst_ack   ),
+    .inst_rdata_i    ( sophon_inst_rdata ),
+    .inst_error_i    ( sophon_inst_error ),
+    .lsu_req_o       ( sophon_lsu_req   ),
+    .lsu_we_o        ( sophon_lsu_we    ),
+    .lsu_addr_o      ( sophon_lsu_addr  ),
+    .lsu_wdata_o     ( sophon_lsu_wdata ),
+    .lsu_wstrb_o     ( sophon_lsu_wstrb ),
+    .lsu_ack_i       ( sophon_lsu_ack   ),
+    .lsu_error_i     ( sophon_lsu_error ),
+    .lsu_rdata_i     ( sophon_lsu_rdata )
+  );
+
+  sophon_obi_adapter #(
+    .InstructionPort ( 1'b1 )
+  ) i_sophon_instr_adapter (
     .clk_i,
     .rst_ni,
-    .test_en_i        ( test_enable_i    ),
-    .hart_id_i        ( 32'd0            ),
-    .boot_addr_i      ( boot_addr_masked ),
-
-    // Instruction Memory Interface (OBI):
-    .instr_req_o,
-    .instr_gnt_i,
-    .instr_rdata_i,
-    .instr_rvalid_i,
-    .instr_addr_o,
-    .instr_err_i,
-
-    // Data memory interface (OBI):
-    .data_req_o,
-    .data_gnt_i,
-    .data_rvalid_i,
-    .data_we_o,
-    .data_be_o,
-    .data_addr_o,
-    .data_wdata_o,
-    .data_rdata_i,
-    .data_err_i,
-
-    // Core-V Extension Interface (CV-X-IF):
-    .x_issue_valid_o     (),
-    .x_issue_ready_i     ( 1'b1 ),
-    .x_issue_req_o       (),
-    .x_issue_resp_i      ( x_issue_resp ),
-    .x_register_o        (),
-    .x_commit_valid_o    (),
-    .x_commit_o          (),
-    .x_result_valid_i    ( 1'b0 ),
-    .x_result_ready_o    (),
-    .x_result_i          ( x_result ),
-
-    // Interrupts
-    .irq_software_i      ( software_irq_i ),
-    .irq_timer_i         ( timer_irq_i    ),
-    .irq_external_i      ( 1'b0           ),
-    .irq_fast_i          ( irqs_i         ),
-    .irq_nm_i            ( 1'b0           ),
-    .irq_pending_o       (),
-
-    // Debug Interface
-    .debug_req_i,
-    .debug_halted_o      (),
-    .dm_halt_addr_i      ( DebugHaltAddress      ),
-    .dm_exception_addr_i ( DebugExceptionAddress ),
-    .crash_dump_o        (),
-
-    // CPU Control Signals
-    .fetch_enable_i,
-    .core_busy_o
+    .sophon_req_i    ( sophon_inst_req   ),
+    .sophon_we_i     ( 1'b0              ),
+    .sophon_addr_i   ( sophon_inst_addr  ),
+    .sophon_wdata_i  ( 32'b0             ),
+    .sophon_wstrb_i  ( 4'b1111           ),
+    .sophon_ack_o    ( sophon_inst_ack   ),
+    .sophon_error_o  ( sophon_inst_error ),
+    .sophon_rdata_o  ( sophon_inst_rdata ),
+    .obi_req_o       ( instr_req_o       ),
+    .obi_gnt_i       ( instr_gnt_i       ),
+    .obi_rvalid_i    ( instr_rvalid_i    ),
+    .obi_we_o        (),
+    .obi_be_o        (),
+    .obi_addr_o      ( instr_addr_o      ),
+    .obi_wdata_o     (),
+    .obi_rdata_i     ( instr_rdata_i     ),
+    .obi_err_i       ( instr_err_i       )
   );
+
+  sophon_obi_adapter i_sophon_data_adapter (
+    .clk_i,
+    .rst_ni,
+    .sophon_req_i    ( sophon_lsu_req   ),
+    .sophon_we_i     ( sophon_lsu_we    ),
+    .sophon_addr_i   ( sophon_lsu_addr  ),
+    .sophon_wdata_i  ( sophon_lsu_wdata ),
+    .sophon_wstrb_i  ( sophon_lsu_wstrb ),
+    .sophon_ack_o    ( sophon_lsu_ack   ),
+    .sophon_error_o  ( sophon_lsu_error ),
+    .sophon_rdata_o  ( sophon_lsu_rdata ),
+    .obi_req_o       ( data_req_o       ),
+    .obi_gnt_i       ( data_gnt_i       ),
+    .obi_rvalid_i    ( data_rvalid_i    ),
+    .obi_we_o        ( data_we_o        ),
+    .obi_be_o        ( data_be_o        ),
+    .obi_addr_o      ( data_addr_o      ),
+    .obi_wdata_o     ( data_wdata_o     ),
+    .obi_rdata_i     ( data_rdata_i     ),
+    .obi_err_i       ( data_err_i       )
+  );
+
+  // Sophon has no equivalent fetch-enable or idle indication in this profile.
+  // Croc's system-bus debug remains available; CPU halt/resume is deferred.
+  assign core_busy_o = 1'b0;
 
 endmodule

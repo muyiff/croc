@@ -33,12 +33,21 @@ sources:
   - rtl/gpio/gpio_reg_pkg.sv
   - rtl/clint/clint_reg_pkg.sv
   - rtl/obi_timer/obi_timer_reg_pkg.sv
+  - rtl/sophon/sophon_pkg.sv
   # add your design files containing anything but modules (packages) here
+
+  - target: not(netlist_yosys)
+    defines:
+      SOPHON_ZICSR: true
+      SOPHON_CLINT: true
+    files:
+      - rtl/sophon/sophon.sv
 
     # RTL
   - target: not(netlist_yosys)
     files:
       # Level 1
+      - rtl/sophon_obi_adapter.sv
       - rtl/core_wrap.sv
       - rtl/bootrom/bootrom.sv
       - rtl/soc_ctrl/soc_ctrl_regs.sv

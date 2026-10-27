@@ -9,13 +9,13 @@
 # Located at 0x0200_0000
 #
 # Boot flow:
-# 1. Enable MSIE, WFI (wait until woken by JTAG via msip)
-# 2. Wake: clear msip, disable interrupts
-# 3. Clear registers x1, x3-x15 (x2/SP set by SRAM stub)
+# 1. Poll CLINT msip until JTAG releases the core
+# 2. Clear msip
+# 3. Clear registers x1, x3-x14 (x2/SP set by SRAM stub)
 # 4. Set mtvec to bootrom trap handler
 # 5. Read boot address from soc_ctrl, jump there with jalr zero
 #    (ra is set to &_eoc so main() returning goes to _eoc)
-# 6. _eoc: pack return value, write CORESTATUS, WFI
+# 6. _eoc: pack return value, write CORESTATUS, loop forever
 #
 # Trap handling:
 # The bootrom trap handler saves/restores caller-saved registers and dispatches
@@ -25,26 +25,28 @@
 # - 0x1000_0008: .word croc_interrupt_handler (function pointer)
 #
 # Fixed section offsets (from base 0x0200_0000):
-# 0x000  _start                 (WFI trampoline + boot)
+# 0x000  _start                 (msip polling trampoline + boot)
 # 0x100  _eoc                   (end of computation)
 # 0x200  _trap_handler_wrapper  (trap entry, save regs, dispatch)
 # 0x300  _trap_exit             (restore regs, mret)
 
 # -----------------------------------------------------------------------------
-# WFI Trampoline (entry point after reset)
+# MSIP Polling Trampoline (entry point after reset)
 # -----------------------------------------------------------------------------
 .section .text
 .globl _start
 _start:
-  csrwi   mie, 8       # Enable M-mode software interrupt
-  wfi                  # Sleep until interrupt
   lui     t0, 0x02040  # t0 = CLINT base (0x0204_0000)
+1:
+  lw      t1, 0(t0)    # Poll msip until JTAG releases the core
+  nop                  # Sophon needs one cycle between a load and its consumer
+  nop                  # Load result is written back after the LSU response
+  beq     t1, zero, 1b
   sw      zero, 0(t0)  # Clear msip
-  csrwi   mie, 0       # Disable all interrupts
 
 # -----------------------------------------------------------------------------
 # Register Initialization
-# Clear x1, x3-x15. Skip x2 stack pointer, set by main sw (needs SRAM size)
+# Clear x1, x3-x14. Skip x2 stack pointer, set by main sw (needs SRAM size)
 # -----------------------------------------------------------------------------
 # addi    x1,  zero, 0 # x1 is ra, used later, so we can skip clearing it
 # addi    x2,  zero, 0 # x2 is sp, set by SRAM stub, so we can skip clearing it
@@ -60,7 +62,7 @@ _start:
   addi    x12, zero, 0
   addi    x13, zero, 0
   addi    x14, zero, 0
-  addi    x15, zero, 0
+// x15/a5 is caller-saved; boot software does not require an initialized value.
 
 # -----------------------------------------------------------------------------
 # CSR Initialization
@@ -90,7 +92,8 @@ _eoc:
   ori     t0, t0, 1    # Set bit 0 (EOC flag)
   lui     t1, 0x03000  # t1 = SOC_CTRL base (0x0300_0000)
   sw      t0, 8(t1)    # Write to CORESTATUS (offset 0x08)
-  wfi                  # Halt
+1:
+  j       1b           # Halt without relying on a core-specific WFI implementation
 
 # -----------------------------------------------------------------------------
 # Trap Handler Wrapper

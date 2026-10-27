@@ -133,15 +133,9 @@ module tb_croc_soc #(
     // load binary to sram
     i_vip.jtag_load_hex(binary_path);
 
-    // wake core from WFI by writing to CLINT msip
-    $display("@%t | [CORE] Waking core via CLINT msip", $time);
+    // release the core from the BootROM CLINT msip polling loop
+    $display("@%t | [CORE] Releasing core via CLINT msip", $time);
     i_vip.jtag_write_reg32(ClintBaseAddr, 32'h1);
-
-    // halt core
-    i_vip.jtag_halt();
-
-    // resume core
-    i_vip.jtag_resume();
 
     // wait for non-zero return value (written into core status register)
     $display("@%t | [CORE] Wait for end of code...", $time);
