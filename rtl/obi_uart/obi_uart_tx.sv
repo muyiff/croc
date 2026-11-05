@@ -120,6 +120,7 @@ module obi_uart_tx #()
       2'b01: word_len_bits = 3'b101; // 6 Bits (5th index in tsr)
       2'b10: word_len_bits = 3'b110; // 7 Bits (6th index in tsr)
       2'b11: word_len_bits = 3'b111; // 8 Bits (7th index in tsr)
+      default: word_len_bits = 3'b111; // Reset/unknown configuration defaults to 8 bits
     endcase
 
     for (int unsigned i = 0; i <= word_len_bits; i = i + 1) begin

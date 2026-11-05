@@ -261,6 +261,7 @@ module obi_uart_rx import obi_uart_pkg::*; #()
       2'b01: word_len_bits = 3'b101; // 6 Bits (5th index in rsr)
       2'b10: word_len_bits = 3'b110; // 7 Bits (6th index in rsr)
       2'b11: word_len_bits = 3'b111; // 8 Bits (7th index in rsr)
+      default: word_len_bits = 3'b111; // Reset/unknown configuration defaults to 8 bits
     endcase
 
     // timeout_level = (character_length * 4) +1
