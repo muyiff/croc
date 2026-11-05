@@ -726,7 +726,7 @@ module SOPHON (
     // = is_bltu|is_bgeu|is_beq|is_bne, they all use unsign operands
     assign is_unsign_branch = op_is_branch && ( (funct3[2]&funct3[1]) | ~(funct3[2]|funct3[1] ));
     always_comb begin
-        unique case (1)
+        priority case (1)
             is_sltu          ,
             is_sltiu         ,
             is_unsign_branch : adder_op1 =  $signed({1'b0, rs1_val}) ;
@@ -739,7 +739,7 @@ module SOPHON (
     end
 
     always_comb begin
-        unique case (1)
+        priority case (1)
             is_slti          : adder_op2 = -$signed(s_i_imm);
             is_sltiu         : adder_op2 = -$signed(u_i_imm);
             is_slt           ,
@@ -2160,7 +2160,7 @@ module SOPHON (
     logic       retire_wr_rd, retire_no_rd;
 
     always_comb begin
-        unique case (1)
+        priority case (1)
             wb_adder   : rd_val = adder_result[31:0];
             wb_cmp     : rd_val = {31'b0, cmp_result};
             wb_bit     : rd_val = bit_result;
