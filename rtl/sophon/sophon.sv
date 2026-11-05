@@ -860,6 +860,10 @@ module SOPHON (
     logic               lsu_load_pending, lsu_store_pending,
                         lsu_load, lsu_store;
     logic [31:0]        lsu_addr;
+    // Save the original byte address at the same edge that records an LSU
+    // exception.  lsu_addr is combinational and becomes zero after the
+    // load/store instruction leaves the pipeline.
+    logic [31:0]        lsu_fault_addr;
 
     // if lsu ack can not return in 1 cycle, pending signals are used to
     // keep lsu request stable.
@@ -1266,10 +1270,10 @@ module SOPHON (
         else if (ex_fetch_access           ) mtval <= inst_addr_o;
         else if (ex_illg_instr|ex_csr_addr ) mtval <= inst_data_1d;
         else if (is_ebreak                 ) mtval <= 32'd0;
-        else if (ex_misalign_load          ) mtval <= lsu_addr;
-        else if (ex_load_access            ) mtval <= lsu_addr;
-        else if (ex_misalign_store         ) mtval <= lsu_addr;
-        else if (ex_store_access           ) mtval <= lsu_addr;
+        else if (ex_misalign_load          ) mtval <= lsu_fault_addr;
+        else if (ex_load_access            ) mtval <= lsu_fault_addr;
+        else if (ex_misalign_store         ) mtval <= lsu_fault_addr;
+        else if (ex_store_access           ) mtval <= lsu_fault_addr;
         else if (is_ecall                  ) mtval <= 32'd0;
     `ifdef SOPHON_CLINT
         // interrupt
@@ -1278,7 +1282,7 @@ module SOPHON (
         else if (mei_en_pending            ) mtval <= 32'd0;
     `endif
         // software write
-        else if ( rvi_csr && (csr_addr==SOPHON_PKG::CSR_MTVAL) ) mtval <= csr_wdata;
+        else if ( rvi_csr && csr_wr && (csr_addr==SOPHON_PKG::CSR_MTVAL) ) mtval <= csr_wdata;
     end
 
     always_ff @(posedge clk_i, negedge rst_ni) begin
@@ -1381,6 +1385,7 @@ module SOPHON (
                 SOPHON_PKG::CSR_MCYCLE       : csr_rdata_rvi = mcycle[31:0];
                 SOPHON_PKG::CSR_MCYCLEH      : csr_rdata_rvi = mcycle[63:32];
                 SOPHON_PKG::CSR_MINSTRET     : csr_rdata_rvi = minstret[31:0];
+                SOPHON_PKG::CSR_MINSTRETH    : csr_rdata_rvi = minstret[63:32];
                 SOPHON_PKG::CSR_HW_PARAMETER : csr_rdata_rvi = 32'd0
                                                             `ifdef SOPHON_EXT_INST   | 1<<0  `endif
                                                             `ifdef SOPHON_EXT_DATA   | 1<<1  `endif
@@ -2391,6 +2396,20 @@ module SOPHON (
             ex_misalign_store <= lsu_addr[0] ;
         else if (if_vld_pos)
             ex_misalign_store <= 1'b0;
+    end
+
+    // Keep the byte address associated with an LSU exception.  The exception
+    // flags below are registered on clk_neg_i, whereas lsu_addr is live only
+    // while the faulting load/store is active.
+    always_ff @(posedge clk_neg_i, negedge rst_ni) begin
+        if(~rst_ni)
+            lsu_fault_addr <= 32'd0;
+        else if ( ((pre_is_lw) & if_vld_pos & (|lsu_addr[1:0])) ||
+                  ((pre_is_lh|pre_is_lhu) & if_vld_pos & lsu_addr[0]) ||
+                  ((pre_is_sw) & if_vld_pos & (|lsu_addr[1:0])) ||
+                  ((pre_is_sh) & if_vld_pos & lsu_addr[0]) ||
+                  (lsu_req_o & lsu_ack_i & lsu_error_i) )
+            lsu_fault_addr <= lsu_addr;
     end
 
     // LSU access fault

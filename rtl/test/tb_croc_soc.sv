@@ -6,7 +6,9 @@
 // - Philippe Sauter <phsauter@iis.ee.ethz.ch>
 // - Enrico Zelioli <ezelioli@iis.ee.ethz.ch>
 
-`define TRACE_WAVE
+// Define TRACE_WAVE on the simulator command line when a waveform is needed.
+// Keep it disabled by default: VCD dumping of this full SoC can consume tens
+// of gigabytes during a normal regression run.
 
 module tb_croc_soc #(
   parameter int unsigned GpioCount = 32

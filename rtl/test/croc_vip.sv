@@ -245,6 +245,15 @@ module croc_vip #(
         end
       end
     end
+
+    // objcopy -O verilog may end with fewer than four bytes.  The JTAG
+    // system-bus access is word-wide, so write the remaining bytes as a
+    // zero-padded little-endian word instead of leaving that SRAM word X.
+    if (byte_count != 0) begin
+      data = data >> (8 * (4 - byte_count));
+      jtag_write(dm::SBData0, data);
+    end
+
     jtag_dbg.write_dmi(dm::SBCS, JtagInitSbcs);
     $fclose(file);
   endtask

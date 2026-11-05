@@ -11,7 +11,7 @@
 
 int main() {
     uart_init();
-    printf("Hello World from Croc!\n");
+    printf("Hello World from CRV SoC!\n");
     uart_write_flush();
     return 0;
 }
