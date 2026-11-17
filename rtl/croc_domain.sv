@@ -227,6 +227,16 @@ module croc_domain import croc_pkg::*; #(
     .timer_irq_i    ( clint_timer_irq    ),
     .software_irq_i ( clint_software_irq ),
 
+    // No CLIC controller yet; standard CLINT/external interrupts remain wired.
+    .clic_irq_req_i       ( 1'b0 ),
+    .clic_irq_shv_i       ( 1'b0 ),
+    .clic_irq_id_i        ( 5'b0 ),
+    .clic_irq_level_i     ( 8'b0 ),
+    .clic_irq_ack_o       (),
+    .clic_irq_intthresh_o (),
+    .clic_mnxti_clr_o     (),
+    .clic_mnxti_id_o      (),
+
     .boot_addr_i    ( BootromAddr ),
 
     .instr_req_o    ( core_instr_obi_req.req     ),

@@ -33,22 +33,31 @@ sources:
   - rtl/gpio/gpio_reg_pkg.sv
   - rtl/clint/clint_reg_pkg.sv
   - rtl/obi_timer/obi_timer_reg_pkg.sv
-  - rtl/sophon/sophon_pkg.sv
   # add your design files containing anything but modules (packages) here
 
   - target: not(netlist_yosys)
     defines:
       SOPHON_ZICSR: true
       SOPHON_CLINT: true
+      SOPHON_CLIC: true
+      SOPHON_EEI: true
+      SOPHON_EEI_SREG: true
+      EEI_RS_MAX: 32
+      EEI_RD_MAX: 32
+      SNAP_DEPTH: 3
+      SNAP_CONTEXT_MODE: 0
     files:
+      - rtl/sophon/sophon_pkg.sv
+      - rtl/sophon/snapreg.sv
+      - rtl/sophon/cust.sv
       - rtl/sophon/sophon.sv
+      - rtl/core_wrap.sv
 
     # RTL
   - target: not(netlist_yosys)
     files:
       # Level 1
       - rtl/sophon_obi_adapter.sv
-      - rtl/core_wrap.sv
       - rtl/bootrom/bootrom.sv
       - rtl/soc_ctrl/soc_ctrl_regs.sv
       - rtl/gpio/gpio_reg_top.sv

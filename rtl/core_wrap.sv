@@ -47,6 +47,16 @@ module core_wrap import croc_pkg::*; #() (
   input logic timer_irq_i,
   input logic software_irq_i,
 
+  // Core-side CLIC interface. The SoC controller is connected here separately.
+  input  logic       clic_irq_req_i,
+  input  logic       clic_irq_shv_i,
+  input  logic [4:0] clic_irq_id_i,
+  input  logic [7:0] clic_irq_level_i,
+  output logic       clic_irq_ack_o,
+  output logic [7:0] clic_irq_intthresh_o,
+  output logic       clic_mnxti_clr_o,
+  output logic [4:0] clic_mnxti_id_o,
+
   input  logic [31:0] boot_addr_i,
 
   // Instruction memory interface (OBI)
@@ -96,6 +106,25 @@ module core_wrap import croc_pkg::*; #() (
   logic        sophon_lsu_error;
   logic [31:0] sophon_lsu_rdata;
 
+  logic eei_req, eei_ext, eei_ack, eei_error;
+  logic [2:0] eei_funct3;
+  logic [6:0] eei_funct7;
+  logic [4:0] eei_batch_start, eei_batch_len, eei_rd_len;
+  logic [1:0] eei_rd_op;
+  logic [31:0] eei_rs_val[`EEI_RS_MAX-1:0];
+  logic [31:0] eei_rd_val[`EEI_RD_MAX-1:0];
+  logic sreg_nest_allow;
+
+  CUST i_sophon_cust (
+    .clk_i,
+    .clk_neg_i ( sophon_clk_neg ),
+    .rst_ni,
+    .eei_req, .eei_ext, .eei_funct3, .eei_funct7,
+    .eei_batch_start, .eei_batch_len, .eei_rs_val,
+    .eei_ack, .eei_error, .eei_rd_op, .eei_rd_len, .eei_rd_val,
+    .sreg_nest_allow_o ( sreg_nest_allow )
+  );
+
   tc_clk_inverter i_sophon_clk_inverter (
     .clk_i ( clk_i          ),
     .clk_o ( sophon_clk_neg )
@@ -110,6 +139,27 @@ module core_wrap import croc_pkg::*; #() (
     .irq_mei_i       ( |irqs_i        ),
     .irq_mti_i       ( timer_irq_i    ),
     .irq_msi_i       ( software_irq_i ),
+    .clic_irq_req_i,
+    .clic_irq_shv_i,
+    .clic_irq_id_i,
+    .clic_irq_level_i,
+    .clic_irq_ack_o,
+    .clic_irq_intthresh_o,
+    .clic_mnxti_clr_o,
+    .clic_mnxti_id_o,
+    .eei_req_o         ( eei_req         ),
+    .eei_ext_o         ( eei_ext         ),
+    .eei_funct3_o      ( eei_funct3      ),
+    .eei_funct7_o      ( eei_funct7      ),
+    .eei_batch_start_o ( eei_batch_start ),
+    .eei_batch_len_o   ( eei_batch_len   ),
+    .eei_rs_val_o      ( eei_rs_val      ),
+    .eei_ack_i         ( eei_ack         ),
+    .eei_error_i       ( eei_error       ),
+    .eei_rd_op_i       ( eei_rd_op       ),
+    .eei_rd_len_i      ( eei_rd_len      ),
+    .eei_rd_val_i      ( eei_rd_val      ),
+    .sreg_nest_allow_i ( sreg_nest_allow ),
     .inst_req_o      ( sophon_inst_req   ),
     .inst_addr_o     ( sophon_inst_addr  ),
     .inst_ack_i      ( sophon_inst_ack   ),
